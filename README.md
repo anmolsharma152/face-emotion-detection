@@ -48,12 +48,12 @@ Press `q` to quit.
 
 ## Stack
 
-| Component | Library |
-|---|---|
-| Face detection | OpenCV Haar Cascade |
+| Component              | Library             |
+| ---------------------- | ------------------- |
+| Face detection         | OpenCV Haar Cascade |
 | Emotion classification | DeepFace + tf-keras |
-| Camera capture | OpenCV VideoCapture |
-| Package manager | uv |
+| Camera capture         | OpenCV VideoCapture |
+| Package manager        | uv                  |
 
 ## Project Structure
 
