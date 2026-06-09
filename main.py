@@ -202,77 +202,107 @@ class FaceEmotionDetector:
 
         return display_frame
 
+    def stop(self):
+        """Signals the background worker thread to stop and waits for it to finish."""
+        self.task_queue.put(None)
+        self.worker_thread.join()
+
 def main():
     parser = argparse.ArgumentParser(description="Face Emotion Detection")
     parser.add_argument("--source", type=str, default="0", help="Camera index (e.g., 0) or path to video/image file")
     parser.add_argument("--image", action="store_true", help="Set to true if source is an image file")
     parser.add_argument("--skip-frames", type=int, default=5, help="Run deepface every N frames")
     parser.add_argument("--output", type=str, default="", help="Path to save output video/image")
+    parser.add_argument("--headless", action="store_true", help="Run in headless mode without GUI display")
     args = parser.parse_args()
+
+    # Verify headless constraints
+    if args.headless and not args.output:
+        print("Error: Headless mode requires specifying an output path via --output")
+        sys.exit(1)
 
     detector = FaceEmotionDetector(skip_frames=args.skip_frames)
 
-    if args.image:
-        frame = cv2.imread(args.source)
-        if frame is None:
-            print(f"Error: Could not read image {args.source}")
-            sys.exit(1)
+    try:
+        if args.image:
+            frame = cv2.imread(args.source)
+            if frame is None:
+                print(f"Error: Could not read image {args.source}")
+                sys.exit(1)
 
-        # Force emotion detection on the first frame
-        detector.skip_frames = 1
-        # Call process_frame to queue the task
-        detector.process_frame(frame)
-        # Block until the background queue has processed the image task
-        detector.task_queue.join()
-        # Call process_frame again to update tracked_faces and render output
-        output_frame = detector.process_frame(frame)
+            # Force emotion detection on the first frame
+            detector.skip_frames = 1
+            # Call process_frame to queue the task
+            detector.process_frame(frame)
+            # Block until the background queue has processed the image task
+            detector.task_queue.join()
+            # Call process_frame again to update tracked_faces and render output
+            output_frame = detector.process_frame(frame)
 
-        if args.output:
-            cv2.imwrite(args.output, output_frame)
-            print(f"Saved output to {args.output}")
+            if args.output:
+                cv2.imwrite(args.output, output_frame)
+                print(f"Saved output to {args.output}")
+            elif not args.headless:
+                cv2.imshow("Emotion Detection", output_frame)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
         else:
-            cv2.imshow("Emotion Detection", output_frame)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-    else:
-        # Try parsing source as int (for webcam) or string (for video file)
-        source = int(args.source) if args.source.isdigit() else args.source
-        cap = cv2.VideoCapture(source)
+            # Try parsing source as int (for webcam) or string (for video file)
+            source = int(args.source) if args.source.isdigit() else args.source
+            cap = cv2.VideoCapture(source)
 
-        if not cap.isOpened():
-            print(f"Cannot open video source: {args.source}")
-            sys.exit(1)
+            if not cap.isOpened():
+                print(f"Cannot open video source: {args.source}")
+                sys.exit(1)
 
-        out = None
-        if args.output:
-            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(args.output, fourcc, fps, (width, height))
+            out = None
+            if args.output:
+                fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(args.output, fourcc, fps, (width, height))
 
-        print("Starting video feed... Press 'q' to quit.")
+            if args.headless:
+                print("Starting video processing in headless mode...")
+                frame_idx = 0
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+                    display_frame = detector.process_frame(frame)
+                    frame_idx += 1
+                    if frame_idx % 30 == 0:
+                        print(f"Processed {frame_idx} frames...")
 
-            display_frame = detector.process_frame(frame)
+                    if out:
+                        out.write(display_frame)
+            else:
+                print("Starting video feed... Press 'q' to quit.")
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
+                    display_frame = detector.process_frame(frame)
+
+                    if out:
+                        out.write(display_frame)
+
+                    cv2.imshow("Emotion Detection", display_frame)
+
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+
+            cap.release()
             if out:
-                out.write(display_frame)
-
-            cv2.imshow("Emotion Detection", display_frame)
-
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
-        cap.release()
-        if out:
-            out.release()
-            print(f"Saved output to {args.output}")
-        cv2.destroyAllWindows()
+                out.release()
+                print(f"Saved output to {args.output}")
+            if not args.headless:
+                cv2.destroyAllWindows()
+    finally:
+        detector.stop()
 
 if __name__ == "__main__":
     main()
