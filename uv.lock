@@ -213,7 +213,7 @@ wheels = [
 ]
 
 [[package]]
-name = "emotion-detetection"
+name = "face-emotion-detection"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
